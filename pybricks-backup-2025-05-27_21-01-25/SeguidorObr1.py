@@ -1,135 +1,134 @@
+# Importando as bibliotecas necessárias do Pybricks
 from pybricks.hubs import PrimeHub
 from pybricks.pupdevices import Motor, ColorSensor
 from pybricks.parameters import Direction, Port
 from pybricks.tools import wait, StopWatch
-from ReLib import ReDriveBase
+from ReLib import ReDriveBase, ReColor  # Biblioteca personalizada com recursos de movimentação
 
-# Initialize hub and timer
+# Inicializa o hub e os cronômetros
 hub = PrimeHub()
-timer = StopWatch()
-line_timer = StopWatch()
+cronometro = StopWatch()
+cronometro_linha = StopWatch()
 
-# Sensors
-right_color = ColorSensor(Port.B)
-left_color = ColorSensor(Port.A)
+# Sensores de cor
+sensor_direito = ReColor(Port.B)
+sensor_esquerdo = ReColor(Port.A)
 
-# Motors
-left_motor = Motor(Port.C)
-right_motor = Motor(Port.D, Direction.COUNTERCLOCKWISE)
+# Motores
+motor_esquerdo = Motor(Port.E)
+motor_direito = Motor(Port.F, Direction.COUNTERCLOCKWISE)
 
-# Drive base
-drive_base = ReDriveBase(left_motor, right_motor, wheel_diameter=38, axle_track=112)
+# Base de movimentação personalizada
+base = ReDriveBase(motor_esquerdo, motor_direito, wheel_diameter=38, axle_track=112)
 
-# Parâmetros PDC (Proporcional Derivado Cumulativo)
-kp = -6.5
+# Parâmetros PIC
+kp = -8
 kd = 0.012
-kc = 0.02
+kc = 0.06
 
-#Velocidades lineares
-base_speed = 75 #velocidade usado em curvas e correção suave
-line_speed = 120 #velocidade usada em linhas beeem retas
-#velocidades angulares
-search_speed = 120 #velocidade usada para procurar o preto na busca de linha
-fine_speed = 10 #velocidade usada para ajustes finos de angulo
+# Velocidades
+velocidade_base = 75
+velocidade_reta = 120
+velocidade_busca = 100
+velocidade_fina = 10
+fazer_busca = True
 
-search_threshold = 51 #valor mínimo de erro para inicar a busca
-black_threshold = 8 #abaixo desse valor é preto
-gray_range = 12 #acima de black_threshold + gray_range é branco
+# Limiares
+limite_busca = 49
+limiar_preto = 10
+margem_cinza = 12
 
+# Variáveis de controle
+curva_cumulativa = 0
+erro = 0
+ultimo_tempo = cronometro.time()
+tempo_em_linha = 0
+angulo_inicio_linha = 0
+primeiro_erro_linha = 0
+estava_na_linha: bool = False
 
-
-cumulative_curve = 0
-error = 0
-last_time = timer.time()
-time_in_line = 0
-line_starting_angle = 0
-line_first_error = 0
-was_in_line: bool = False
+# Zera o giroscópio
 hub.imu.reset_heading(0)
 
-
-
-# Loop forever
+# Loop principal
 while True:
-    # Time delta calculation (in seconds), protected against zero
-    current_time = timer.time()
-    delta_t = max(0.001, (current_time - last_time) / 1000)  # ms to s
-    last_time = current_time
+    tempo_atual = cronometro.time()
+    delta_t = max(0.001, (tempo_atual - ultimo_tempo) / 1000)
+    ultimo_tempo = tempo_atual
 
-    # Calculate error between left and right sensor reflections
-    last_error = error
-    error = right_color.reflection() - left_color.reflection()
-    quadratic_error = pow(pow(right_color.reflection(),2) - pow(left_color.reflection(),2),0.5)
+    # Usa o canal VERDE (G) da leitura RGB dos sensores
+    erro_anterior = erro
+    erro = sensor_direito.rgb()[1] - sensor_esquerdo.rgb()[1]
 
-    # Derivative: rate of error change
-    derivative = (last_error - error) / delta_t
+    erro_quadratico = pow(
+        pow(sensor_direito.rgb()[1], 2) - pow(sensor_esquerdo.rgb()[1], 2), 0.5
+    )
 
-    # Calculate steering correction
-    correction = error * kp + derivative * kd
+    derivada = (erro_anterior - erro) / delta_t
+    correcao = erro * kp + derivada * kd
 
-    # Determine direction of correction safely
-    if correction != 0:
-        correction_sign = correction / abs(correction)
+    if correcao != 0:
+        sinal_correcao = correcao / abs(correcao)
     else:
-        correction_sign = 0
+        sinal_correcao = 0
 
-    # Handle curve buildup logic
-    if abs(correction) > 10:
-        # Allow buildup if cumulative_curve is 0 or heading in same direction
-        if cumulative_curve == 0 or correction_sign == cumulative_curve / abs(cumulative_curve):
-            cumulative_curve += correction_sign * delta_t * kc
+    if abs(correcao) > 10:
+        if curva_cumulativa == 0 or sinal_correcao == curva_cumulativa / abs(curva_cumulativa):
+            curva_cumulativa += sinal_correcao * delta_t * kc
         else:
-            cumulative_curve = 0
+            curva_cumulativa = 0
     else:
-        cumulative_curve = 0
+        curva_cumulativa = 0
 
-    # Apply movement
-    if abs(correction) > 10:
-        if abs(correction) > 35:
-            drive_base.drive_with_gyro(base_speed, correction + cumulative_curve)
+    if abs(correcao) > 10:
+        if abs(correcao) > 35:
+            base.drive_with_gyro(velocidade_base, correcao + curva_cumulativa)
         else:
-            drive_base.drive(line_speed, correction + cumulative_curve)
+            base.drive(velocidade_reta, correcao + curva_cumulativa)
     else:
-        drive_base.drive(line_speed, 0)
+        base.drive(velocidade_reta, 0)
 
-
-    if abs(quadratic_error) > search_threshold:
-        if not was_in_line:
-            line_timer.reset()
-            line_timer.resume()
-            line_starting_angle = hub.imu.heading()
-            line_first_error = error
+    if abs(erro_quadratico) > limite_busca and fazer_busca:
+        if not estava_na_linha:
+            cronometro_linha.reset()
+            cronometro_linha.resume()
+            angulo_inicio_linha = hub.imu.heading()
+            primeiro_erro_linha = erro
         else:
-            drive_base.straight(30)
-            drive_base.straight(45)
-            drive_base.drive(0, -1 * search_speed * (line_first_error / abs(line_first_error)))
-            if line_first_error < 0:
-                while left_color.reflection() > black_threshold:
-                    wait(1)
-            else:
-                while right_color.reflection() > black_threshold:
-                    wait(1)
+            if cronometro_linha.time() > 2:
+                base.straight(5)
+                erro_quadratico = pow(
+                    pow(sensor_direito.rgb()[1], 2) - pow(sensor_esquerdo.rgb()[1], 2), 0.5
+                )
+                if abs(erro_quadratico) > limite_busca:
+                    base.straight(65)
+                    base.curve(30 * (primeiro_erro_linha / abs(primeiro_erro_linha)), 0, 20)
 
-            drive_base.drive(0,line_speed * (line_first_error / abs(line_first_error)))
-            if line_first_error < 0:
-                while left_color.reflection() < black_threshold + gray_range:
-                    wait(1)
-            else:
-                while right_color.reflection() < black_threshold + gray_range:
-                    wait(1)
-        was_in_line = True
+                    base.drive(0, -1 * velocidade_busca * (primeiro_erro_linha / abs(primeiro_erro_linha)))
+
+                    if primeiro_erro_linha < 0:
+                        while sensor_esquerdo.rgb()[1] > limiar_preto:
+                            wait(1)
+                    else:
+                        while sensor_direito.rgb()[1] > limiar_preto:
+                            wait(1)
+
+                    base\.brake()
+
+                    base.drive(0, velocidade_reta * (primeiro_erro_linha / abs(primeiro_erro_linha)))
+
+                    if primeiro_erro_linha < 0:
+                        while sensor_esquerdo.rgb()[1] < limiar_preto + margem_cinza:
+                            wait(1)
+                    else:
+                        while sensor_direito.rgb()[1] < limiar_preto + margem_cinza:
+                            wait(1)
+
+        estava_na_linha = True
     else:
-        if was_in_line:
-            time_in_line = line_timer.time()
-            line_timer.pause()
-        was_in_line = False
+        if estava_na_linha:
+            tempo_em_linha = cronometro_linha.time()
+            cronometro_linha.pause()
+        estava_na_linha = False
 
-
-
-
-
-
-
-
-    # Brief pause to avoid CPU overload
     wait(1)
