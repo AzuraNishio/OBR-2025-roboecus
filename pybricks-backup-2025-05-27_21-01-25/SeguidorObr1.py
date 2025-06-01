@@ -3,16 +3,17 @@ from pybricks.hubs import PrimeHub
 from pybricks.pupdevices import Motor, ColorSensor
 from pybricks.parameters import Direction, Port
 from pybricks.tools import wait, StopWatch
-from ReLib import ReDriveBase, ReColor  # Biblioteca personalizada com recursos de movimentação
-
+from ReLib import *
 # Inicializa o hub e os cronômetros
 hub = PrimeHub()
 cronometro = StopWatch()
 cronometro_linha = StopWatch()
 
+
 # Sensores de cor
 sensor_direito = ReColor(Port.B)
 sensor_esquerdo = ReColor(Port.A)
+sensores = ReColorDuo(sensor_esquerdo, sensor_direito)
 
 # Motores
 motor_esquerdo = Motor(Port.E)
@@ -22,9 +23,9 @@ motor_direito = Motor(Port.F, Direction.COUNTERCLOCKWISE)
 base = ReDriveBase(motor_esquerdo, motor_direito, wheel_diameter=38, axle_track=112)
 
 # Parâmetros PIC
-kp = -8
-kd = 0.012
-kc = 0.06
+kp = 20
+kd = -0.012
+kc = -0.06
 
 # Velocidades
 velocidade_base = 75
@@ -34,9 +35,12 @@ velocidade_fina = 10
 fazer_busca = True
 
 # Limiares
-limite_busca = 49
-limiar_preto = 10
-margem_cinza = 12
+limite_busca = 49 #mesa oficial
+#limite_busca = 1 #mesa de testes em casa
+limiar_preto = 14
+margem_cinza = 15
+verde = (22, 32, 28)
+limiar_verde = 7
 
 # Variáveis de controle
 curva_cumulativa = 0
@@ -50,19 +54,86 @@ estava_na_linha: bool = False
 # Zera o giroscópio
 hub.imu.reset_heading(0)
 
+
+#while True:
+ #   print(sensor_direito.rgb())
+
 # Loop principal
 while True:
     tempo_atual = cronometro.time()
     delta_t = max(0.001, (tempo_atual - ultimo_tempo) / 1000)
     ultimo_tempo = tempo_atual
 
-    # Usa o canal VERDE (G) da leitura RGB dos sensores
-    erro_anterior = erro
-    erro = sensor_direito.rgb()[1] - sensor_esquerdo.rgb()[1]
+    #Antes de tudo executa o verde
+    #==================================[lógica verde]==================================
+    if (sensor_direito.compare_rgb(verde, limiar_verde)) or (sensor_esquerdo.compare_rgb(verde, limiar_verde)):
 
-    erro_quadratico = pow(
-        pow(sensor_direito.rgb()[1], 2) - pow(sensor_esquerdo.rgb()[1], 2), 0.5
-    )
+        base.straight(5)
+
+        #armazena os valores da leitura do verde depois de uma mini reta
+        verde_direita = sensor_direito.compare_rgb(verde, limiar_verde)
+        verde_esquerda = sensor_esquerdo.compare_rgb(verde, limiar_verde)
+
+        #anda até sair do verde
+        while(sensor_direito.compare_rgb(verde, limiar_verde)) or (sensor_esquerdo.compare_rgb(verde, limiar_verde)):
+            base.drive(velocidade_reta + 109,0)
+
+        #anda um pouco mais do que o verde
+        base.straight(6)        
+        
+        #executa se depois do verde tem preto
+        if(sensor_esquerdo.rgb()[1] < limiar_preto + margem_cinza or sensor_direito.rgb()[1] < limiar_preto + margem_cinza):
+            print("verde")
+            if verde_direita and verde_esquerda:
+                #180 graus
+                base.straight(40)
+                base.curve(150, 0, 90)
+
+                base.drive(0, 90)
+
+                while sensor_esquerdo.rgb()[1] > limiar_preto:
+                     wait(1)
+
+                base.brake()
+
+                base.drive(0, -90)
+
+                while sensor_esquerdo.rgb()[1] < limiar_preto + margem_cinza:
+                    wait(1)
+                
+                base.curve(-3, 0, velocidade_fina)
+
+                
+            else:
+                #direita ou esquerda
+                sensor_da_curva = sensores.get_sensor_right_if_true(verde_direita)
+                sensor_oposto_da_curva = sensores.get_sensor_right_if_true(verde_esquerda)
+                curve_sign = (1 if verde_direita else -1)
+                starting_angle = hub.imu.heading()
+
+                base.straight(20)
+                base.curve(60*curve_sign, 0, 90)
+
+                
+                while(abs(starting_angle - hub.imu.heading() or sensor_da_curva.rgb()[1] < 25) < 75):
+                    base.drive(
+                        60, 
+                        curve_sign * (5 + (100 if sensor_da_curva.rgb()[1] < 25 else 0))
+                    )
+
+
+
+
+
+    #==================================[fim lógica verde]==================================
+    
+    #após verde executa o seguidor de linha
+    #==================================[seguidor]==================================
+    # Usa o canal VERDE (G) da leitura RGB dos sensores para calcular o erro
+    erro_anterior = erro
+    erro = sensores.g_difference()
+
+    erro_quadratico = sensores.g_squared_difference()
 
     derivada = (erro_anterior - erro) / delta_t
     correcao = erro * kp + derivada * kd
@@ -88,6 +159,8 @@ while True:
     else:
         base.drive(velocidade_reta, 0)
 
+    
+    #- - - - - - - - - - - [Aqui lógica da busca de linha] - - - - - - - - - - - 
     if abs(erro_quadratico) > limite_busca and fazer_busca:
         if not estava_na_linha:
             cronometro_linha.reset()
@@ -96,33 +169,31 @@ while True:
             primeiro_erro_linha = erro
         else:
             if cronometro_linha.time() > 2:
-                base.straight(5)
-                erro_quadratico = pow(
-                    pow(sensor_direito.rgb()[1], 2) - pow(sensor_esquerdo.rgb()[1], 2), 0.5
-                )
-                if abs(erro_quadratico) > limite_busca:
-                    base.straight(65)
-                    base.curve(30 * (primeiro_erro_linha / abs(primeiro_erro_linha)), 0, 20)
+                base.straight(7)
 
-                    base.drive(0, -1 * velocidade_busca * (primeiro_erro_linha / abs(primeiro_erro_linha)))
+                erro_quadratico = sensores.g_squared_difference()
 
-                    if primeiro_erro_linha < 0:
-                        while sensor_esquerdo.rgb()[1] > limiar_preto:
-                            wait(1)
-                    else:
-                        while sensor_direito.rgb()[1] > limiar_preto:
-                            wait(1)
+                #verifica se o erro é significativo depois de andar 5 milimetros e se não é verde
+                if abs(erro_quadratico) > limite_busca and not((sensor_direito.compare_rgb(verde, limiar_verde)) or (sensor_esquerdo.compare_rgb(verde, limiar_verde))):
+                    
+                    buscar_para_direita = primeiro_erro_linha < 0
+                    
+                    base.straight(63)
+                    base.curve(30 * (1 if buscar_para_direita else -1), 0, 20)
 
-                    base\.brake()
+                    base.drive(0, -1 * velocidade_busca * (1 if buscar_para_direita else -1))
+                    
+                    while sensores.get_sensor_right_if_true(buscar_para_direita).rgb()[1] > limiar_preto:
+                        wait(1)
 
-                    base.drive(0, velocidade_reta * (primeiro_erro_linha / abs(primeiro_erro_linha)))
+                    base.brake()
 
-                    if primeiro_erro_linha < 0:
-                        while sensor_esquerdo.rgb()[1] < limiar_preto + margem_cinza:
-                            wait(1)
-                    else:
-                        while sensor_direito.rgb()[1] < limiar_preto + margem_cinza:
-                            wait(1)
+                    base.drive(0, velocidade_reta * (1 if buscar_para_direita else -1))
+
+                    while sensores.get_sensor_right_if_true(buscar_para_direita).rgb()[1] < limiar_preto + margem_cinza:
+                        wait(1)
+                    
+                    base.curve(3 * (1 if buscar_para_direita else -1), 0, velocidade_fina)
 
         estava_na_linha = True
     else:
@@ -130,5 +201,10 @@ while True:
             tempo_em_linha = cronometro_linha.time()
             cronometro_linha.pause()
         estava_na_linha = False
+    
+    #==================================[fim seguidor]==================================
+
+    
+    
 
     wait(1)
