@@ -64,6 +64,8 @@ hub.imu.reset_heading(0)
 def sair_sala_3_reto(hub, base, sensores, alinhar: bool, u):
     if (alinhar):
         base.straight(-1 * u)
+    else:
+        quantizar_posicao(hub, 90)
 
     base.drive(900, 0)
 
@@ -71,8 +73,8 @@ def sair_sala_3_reto(hub, base, sensores, alinhar: bool, u):
         wait(1)
 
 
-def quantizar_posição(hub, step):
-    base.curve(((hub.imu.heading() + (step / 2)) % step) - (step / 2))
+def quantizar_posicao(hub, step):
+    base.curve(((hub.imu.heading() + (step / 2)) % step) - (step / 2), 0, 20)
 
 
 def is_tilted(hub):
@@ -247,6 +249,7 @@ while True:
 
         else:  # senão fazer o resto da sala 3
             base.curve(lado_do_sensor * -90, 0, velocidade_fina)
+            quantizar_posicao(hub, 90)
             base.straight(dist1 - (u * 1.5) + 80)
 
             if dist1 > u * 1.7 and sonic.distance() > sonic_limit:
@@ -254,12 +257,14 @@ while True:
                 sair_sala_3_reto(hub, base, sensores, False, u)
             else:
                 base.curve(lado_do_sensor * 90, 0, velocidade_fina)
-                base.drive(50,0)
-                while sensor_frente.reflection() > 10 or sonic.distance() < sonic_limit:
+                quantizar_posicao(hub, 90)
+                base.drive(70,0)
+                while sensor_frente.reflection() < 40 and sonic.distance() < sonic_limit:
                     wait(1)
                 base.brake()
 
                 if sonic.distance() > sonic_limit:
+                    base.straight(u*0.5)
                     base.curve(lado_do_sensor * -90, 0, velocidade_fina)
                     sair_sala_3_reto(hub, base, sensores, False, u)
                 else:
@@ -270,8 +275,9 @@ while True:
                     base.brake()
 
                     if sonic.distance() > sonic_limit:
+                        base.straight(u*0.5)
                         base.curve(lado_do_sensor * -90, 0, velocidade_fina)
-                        sair_sala_3_reto(hub, base, sensores, False)
+                        sair_sala_3_reto(hub, base, sensores, False, u)
                     else:
                         base.curve(lado_do_sensor * 180, 0, velocidade_fina)
 
