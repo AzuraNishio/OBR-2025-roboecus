@@ -1,6 +1,6 @@
 # Importando as bibliotecas necessárias do Pybricks
 from pybricks.hubs import PrimeHub
-from pybricks.pupdevices import Motor, ColorSensor
+from pybricks.pupdevices import Motor, ColorSensor, UltrasonicSensor
 from pybricks.parameters import Direction, Port
 from pybricks.tools import wait, StopWatch
 from ReLib import *
@@ -13,7 +13,9 @@ cronometro_linha = StopWatch()
 # Sensores de cor
 sensor_direito = ReColor(Port.B)
 sensor_esquerdo = ReColor(Port.A)
+sensor_frente = ReColor(Port.C)
 sensores = ReColorDuo(sensor_esquerdo, sensor_direito)
+sonic = UltrasonicSensor(Port.D)
 
 # Motores
 motor_esquerdo = Motor(Port.E)
@@ -23,8 +25,8 @@ motor_direito = Motor(Port.F, Direction.COUNTERCLOCKWISE)
 base = ReDriveBase(motor_esquerdo, motor_direito, wheel_diameter=38, axle_track=112)
 
 # multiplicadores sensores de cor
-sensor_esquerdo.set_multiplicadores()
-sensor_direito.set_multiplicadores()
+sensor_esquerdo.set_multiplicadores(1, 1, 1, 0.9)
+sensor_direito.set_multiplicadores(1, 1, 1, 0.9)
 
 # Parâmetros PIC
 kp = 25
@@ -58,8 +60,24 @@ estava_na_linha: bool = False
 # Zera o giroscópio
 hub.imu.reset_heading(0)
 
-# while True:
-#   print(sensor_direito.rgb())
+
+def sair_sala_3_reto(hub, base, sensores, alinhar: bool, u):
+    if (alinhar):
+        base.straight(-1 * u)
+
+    base.drive(900, 0)
+
+    while (sensores.get_sensor_right_if_true(True).rgb()[1] > limiar_preto):
+        wait(1)
+
+
+def quantizar_posição(hub, step):
+    base.curve(((hub.imu.heading() + (step / 2)) % step) - (step / 2))
+
+
+def is_tilted(hub):
+    return hub.imu.tilt()[0] + hub.imu.tilt()[1] > 12
+
 
 # Loop principal
 while True:
@@ -181,7 +199,7 @@ while True:
 
                 # verifica se o erro é significativo depois de andar 5 milimetros e se não é verde
                 if abs(erro_quadratico) > limite_busca and not ((sensor_direito.compare_rgb(verde, limiar_verde)) or (
-                sensor_esquerdo.compare_rgb(verde, limiar_verde))):
+                        sensor_esquerdo.compare_rgb(verde, limiar_verde))):
 
                     buscar_para_direita = primeiro_erro_linha < 0
 
@@ -209,6 +227,57 @@ while True:
             cronometro_linha.pause()
         estava_na_linha = False
 
-    # ==================================[fim seguidor]==================================
+    # ==================================[fim seguidor início sala 3]=================a=================
+    if (sensor_direito.reflection() > 80):
+        # Código sala 3
+        lado_do_sensor = 1
+        entrada_meio = False
+        lado_oposto_do_sensor = -lado_do_sensor
+        u = 300  # 1 terço da sala 3 em milimetros
+        sonic_limit = 3 * u * pow(2.1, 0.5)
+
+        base.straight(u)
+
+        dist1 = sonic.distance()
+        print(dist1)
+
+        if (dist1 > sonic_limit):  # Caso a saída já estiver no lado certo sair
+            base.curve(lado_do_sensor * -90, 0, velocidade_fina)
+            sair_sala_3_reto(hub, base, sensores, not entrada_meio, u)
+
+        else:  # senão fazer o resto da sala 3
+            base.curve(lado_do_sensor * -90, 0, velocidade_fina)
+            base.straight(dist1 - (u * 1.5) + 80)
+
+            if dist1 > u * 1.7 and sonic.distance() > sonic_limit:
+                base.curve(lado_do_sensor * -90, 0, velocidade_fina)
+                sair_sala_3_reto(hub, base, sensores, False, u)
+            else:
+                base.curve(lado_do_sensor * 90, 0, velocidade_fina)
+                base.drive(50,0)
+                while sensor_frente.reflection() > 10 or sonic.distance() < sonic_limit:
+                    wait(1)
+                base.brake()
+
+                if sonic.distance() > sonic_limit:
+                    base.curve(lado_do_sensor * -90, 0, velocidade_fina)
+                    sair_sala_3_reto(hub, base, sensores, False, u)
+                else:
+                    base.curve(lado_do_sensor * 180, 0, velocidade_fina)
+                    base.drive(50, 0)
+                    while sensor_frente.reflection() > 10 or sonic.distance() < sonic_limit:
+                        wait(1)
+                    base.brake()
+
+                    if sonic.distance() > sonic_limit:
+                        base.curve(lado_do_sensor * -90, 0, velocidade_fina)
+                        sair_sala_3_reto(hub, base, sensores, False)
+                    else:
+                        base.curve(lado_do_sensor * 180, 0, velocidade_fina)
+
+
+
 
     wait(1)
+
+

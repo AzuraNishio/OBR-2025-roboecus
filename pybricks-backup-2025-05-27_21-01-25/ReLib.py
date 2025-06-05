@@ -24,16 +24,16 @@ class ReDriveBase(DriveBase):
     def drive_with_gyro(self, speed: float, angular_speed: float):
         super().use_gyro(True)
         super().drive(speed, angular_speed * self.curve_cultiplier)
-    
+
 
 
     def brake(self):
         super().brake()
-    
+
     def curve(self, degrees, radius, speed):
         super().use_gyro(True)
         super().curve(radius, degrees)
-    
+
     def calibrate(self, hub: PrimeHub):
         starting_heading = hub.imu.heading()
         super().drive(0, 45)
@@ -142,7 +142,7 @@ class ReColor(ColorSensor):
         return r, g, b
 
     def reflection(self):
-        return super().reflect()
+        return super().reflection()
 
     def color(self):
         return super().color()
@@ -236,7 +236,7 @@ class ReColorDuo:
         return math.sqrt(abs(diff)) * (1 if diff >= 0 else -1)
 
     # --- HSV COMPONENT DIFFERENCES ---
-    
+
     def hsv_difference(self):
         """
         Returns a tuple of signed HSV differences (left - right).
@@ -278,7 +278,7 @@ class ReColorDuo:
         Returns True if either sensor matches the target color within threshold.
         """
         return (self.left.compare_rgb(target_rgb, threshold), self.right.compare_rgb(target_rgb, threshold))
-        
+
 
     def get_raw_data(self):
         """Returns raw RGB and reflection values from both sensors."""
@@ -288,9 +288,61 @@ class ReColorDuo:
             "left_reflection": self.left.reflection(),
             "right_reflection": self.right.reflection()
         }
-    
+
     def get_sensor_right_if_true(self, direito):
         if direito:
             return self.right
         else:
             return self.left
+
+    def info_dump(self):
+        """Imprime no console os dados completos dos sensores e suas diferenças."""
+        l_r, l_g, l_b = self.left.rgb()
+        r_r, r_g, r_b = self.right.rgb()
+        l_h, l_s, l_v = self.left.hsv()
+        r_h, r_s, r_v = self.right.hsv()
+        l_ref = self.left.reflection()
+        r_ref = self.right.reflection()
+
+        rgb_diff = self.rgb_difference()
+        hsv_diff = self.hsv_difference()
+        r_diff = self.r_difference()
+        g_diff = self.g_difference()
+        b_diff = self.b_difference()
+        h_diff = self.h_difference()
+        s_diff = self.s_difference()
+        v_diff = self.v_difference()
+        ref_diff = self.reflection_difference()
+
+        r2_diff = self.r_squared_difference()
+        g2_diff = self.g_squared_difference()
+        b2_diff = self.b_squared_difference()
+        h2_diff = self.h_squared_difference()
+        s2_diff = self.s_squared_difference()
+        v2_diff = self.v_squared_difference()
+        ref2_diff = self.squared_reflection_difference()
+
+        print(f"""
+       ========== ReColor Duo Info Dump ==========
+       --- LEFT SENSOR ---
+       RGB : ({l_r:3d}, {l_g:3d}, {l_b:3d})
+       HSV : ({l_h:6.1f}, {l_s:6.3f}, {l_v:6.3f})
+       Reflexão: {l_ref}
+
+       --- RIGHT SENSOR ---
+       RGB : ({r_r:3d}, {r_g:3d}, {r_b:3d})
+       HSV : ({r_h:6.1f}, {r_s:6.3f}, {r_v:6.3f})
+       Reflexão: {r_ref}
+
+       --- DIFFERENCES (LEFT - RIGHT) ---
+       RGB Diferença      : {rgb_diff}
+       HSV Diferença      : ({h_diff:+6.1f}, {s_diff:+6.3f}, {v_diff:+6.3f})
+       Reflexão Diferença : {ref_diff:+.2f}
+
+       --- SQUARED DIFFERENCES ---
+       R² Dif: {r2_diff:+.2f}, G² Dif: {g2_diff:+.2f}, B² Dif: {b2_diff:+.2f}
+       H² Dif: {h2_diff:+.2f}, S² Dif: {s2_diff:+.2f}, V² Dif: {v2_diff:+.2f}
+       Reflexão² Dif      : {ref2_diff:+.2f}
+       ===========================================
+       """)
+
