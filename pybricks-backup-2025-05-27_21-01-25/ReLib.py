@@ -68,42 +68,39 @@ class ReHub(PrimeHub):
         print("meow")
 
 
-# Classe ReColor: extensão do sensor de cor padrão para incluir funcionalidades adicionais
 class ReColor(ColorSensor):
     def __init__(self, port):
-        # Inicializa a classe base com a porta especificada
         super().__init__(port)
         self.port = port
 
+        # Multiplicadores padrão (1.0)
+        self.multiplicador_vermelho = 1.0
+        self.multiplicador_verde = 1.0
+        self.multiplicador_azul = 1.0
+        self.multiplicador_geral = 1.0
 
+    def set_multiplicadores(self, vermelho=1.0, verde=1.0, azul=1.0, geral=1.0):
+        """Atualiza os multiplicadores de ajuste de cor."""
+        self.multiplicador_vermelho = vermelho
+        self.multiplicador_verde = verde
+        self.multiplicador_azul = azul
+        self.multiplicador_geral = geral
 
+    def aplicar_multiplicadores(self, r, g, b):
+        """Aplica os multiplicadores definidos aos valores RGB."""
+        r = int(r * self.multiplicador_vermelho * self.multiplicador_geral)
+        g = int(g * self.multiplicador_verde * self.multiplicador_geral)
+        b = int(b * self.multiplicador_azul * self.multiplicador_geral)
+        return r, g, b
 
     def rgb_to_hsv(self, r, g, b):
-        """
-        Converte um valor RGB (Red, Green, Blue) para o espaço de cor HSV (Hue, Saturation, Value).
-
-        Parâmetros:
-            r (int): Componente vermelho (0–255)
-            g (int): Componente verde (0–255)
-            b (int): Componente azul (0–255)
-
-        Retorno:
-            tuple: (h, s, v)
-                h (float): Matiz, em graus (0 a 360)
-                s (float): Saturação (0 a 1)
-                v (float): Valor/brilho (0 a 1)
-        """
-        # Normaliza os valores RGB para o intervalo [0, 1]
         r, g, b = r / 255.0, g / 255.0, b / 255.0
-
-        # Determina os valores máximo e mínimo entre os componentes
         cmax = max(r, g, b)
         cmin = min(r, g, b)
         delta = cmax - cmin
 
-        # Cálculo da Matiz (Hue)
         if delta == 0:
-            h = 0  # Matiz indefinido, cor acromática
+            h = 0
         elif cmax == r:
             h = (60 * ((g - b) / delta)) % 360
         elif cmax == g:
@@ -111,42 +108,18 @@ class ReColor(ColorSensor):
         elif cmax == b:
             h = (60 * ((r - g) / delta) + 240) % 360
 
-        # Cálculo da Saturação (Saturation)
-        if cmax == 0:
-            s = 0  # Sem saturação (cor preta)
-        else:
-            s = delta / cmax
-
-        # O Valor (Value) é o maior dos componentes RGB normalizados
+        s = 0 if cmax == 0 else delta / cmax
         v = cmax
 
-        # Retorna a tupla HSV
         return h, s, v
 
     def hsv_to_rgb(self, h, s, v):
-        """
-        Converte um valor HSV (Hue, Saturation, Value) para o espaço de cor RGB (Red, Green, Blue).
-
-        Parâmetros:
-            h (float): Matiz, em graus (0 a 360)
-            s (float): Saturação (0 a 255)
-            v (float): Valor/brilho (0 a 255)
-
-        Retorno:
-            tuple: (r, g, b)
-                r (int): Componente vermelho (0–255)
-                g (int): Componente verde (0–255)
-                b (int): Componente azul (0–255)
-        """
-        # Normaliza saturação e valor para o intervalo [0, 1]
         s /= 255.0
         v /= 255.0
-
-        c = v * s  # Chroma: intensidade da cor
+        c = v * s
         x = c * (1 - abs((h / 60) % 2 - 1))
         m = v - c
 
-        # Define os valores RGB intermediários com base no setor do círculo HSV
         if 0 <= h < 60:
             r_, g_, b_ = c, x, 0
         elif 60 <= h < 120:
@@ -160,74 +133,50 @@ class ReColor(ColorSensor):
         elif 300 <= h < 360:
             r_, g_, b_ = c, 0, x
         else:
-            r_, g_, b_ = 0, 0, 0  # Valor inválido de h, retorna preto
+            r_, g_, b_ = 0, 0, 0
 
-        # Ajusta o brilho final (m) e converte para o intervalo [0, 255]
         r = int((r_ + m) * 255)
         g = int((g_ + m) * 255)
         b = int((b_ + m) * 255)
 
         return r, g, b
 
-
-
     def reflection(self):
-        # Retorna o valor de reflexão de luz (intensidade luminosa)
         return super().reflect()
 
     def color(self):
-        # Retorna a cor detectada como uma enumeração de cor (Color)
         return super().color()
 
-    def hsv(self, surface):
-        # Retorna os componentes HSV conforme fornecido pela API nativa do sensor
+    def hsv(self, surface=True):
         return super().hsv(surface)
 
-    def hsv(self):
-        # Retorna os componentes HSV conforme fornecido pela API nativa do sensor
-        return super().hsv(True)
-
-    def rgb(self, surface):
-        # Retorna os componentes HSV conforme fornecido pela API nativa do sensor
-
-        hsv = super().hsv(surface)
-        return self.hsv_to_rgb(hsv[0], hsv[1], hsv[2])
-
-    def rgb(self):
-        # Retorna os componentes HSV conforme fornecido pela API nativa do sensor
-
-        hsv = super().hsv(True)
-        return self.hsv_to_rgb(hsv[0], hsv[1], hsv[2])
-
+    def rgb(self, surface=True):
+        """Retorna os valores RGB ajustados com multiplicadores."""
+        h, s, v = super().hsv(surface)
+        r, g, b = self.hsv_to_rgb(h, s, v)
+        return self.aplicar_multiplicadores(r, g, b)
 
     def compare_rgb(self, color, abs_threshold=30, prop_threshold=0.1):
-        r1, g1, b1 = self.rgb()  # current sensor RGB
-        r2, g2, b2 = color       # target color
+        r1, g1, b1 = self.rgb()
+        r2, g2, b2 = color
 
-        # Calculate absolute Euclidean distance
         abs_distance = pow((r1 - r2)**2 + (g1 - g2)**2 + (b1 - b2)**2, 0.5)
-
-        # To avoid division by zero, add a tiny epsilon
         epsilon = 1e-6
 
-        # Normalize RGB to proportions
         sum1 = r1 + g1 + b1 + epsilon
         sum2 = r2 + g2 + b2 + epsilon
 
         prop_r1, prop_g1, prop_b1 = r1 / sum1, g1 / sum1, b1 / sum1
         prop_r2, prop_g2, prop_b2 = r2 / sum2, g2 / sum2, b2 / sum2
 
-        # Calculate proportional distance (Euclidean in normalized RGB space)
         prop_distance = pow(
-            (prop_r1 - prop_r2)**2 +
-            (prop_g1 - prop_g2)**2 +
-            (prop_b1 - prop_b2)**2,
+            (prop_r1 - prop_r2) ** 2 +
+            (prop_g1 - prop_g2) ** 2 +
+            (prop_b1 - prop_b2) ** 2,
             0.5
         )
 
-        # Return True only if both absolute and proportional distances are below thresholds
         return abs_distance < abs_threshold and prop_distance < prop_threshold
-
 
 
 class ReColorDuo:
@@ -258,7 +207,7 @@ class ReColorDuo:
         r1, g1, b1 = self.left.rgb()
         r2, g2, b2 = self.right.rgb()
         return (r1 - r2, g1 - g2, b1 - b2)
-    
+
     def r_difference(self):
         return self.left.rgb()[0] - self.right.rgb()[0]
 
