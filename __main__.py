@@ -5,83 +5,84 @@ from pybricks.parameters import Direction, Port
 from pybricks.tools import wait, StopWatch
 from ReLib import *
 
-# Inicializa o hub e os cronômetros
-hub = PrimeHub()
-cronometro = StopWatch()
-cronometro_linha = StopWatch()
+if True:
+    # Inicializa o hub e os cronômetros
+    hub = PrimeHub()
+    cronometro = StopWatch()
+    cronometro_linha = StopWatch()
 
-# Sensores de cor
-sensor_direito = ReColor(Port.B)
-sensor_esquerdo = ReColor(Port.A)
-sensor_frente = ReColor(Port.C)
-sensores = ReColorDuo(sensor_esquerdo, sensor_direito)
-sonic = UltrasonicSensor(Port.D)
+    # Sensores de cor
+    sensor_direito = ReColor(Port.B)
+    sensor_esquerdo = ReColor(Port.A)
+    sensor_frente = ReColor(Port.C)
+    sensores = ReColorDuo(sensor_esquerdo, sensor_direito)
+    sonic = UltrasonicSensor(Port.D)
 
-# Motores
-motor_esquerdo = Motor(Port.E)
-motor_direito = Motor(Port.F, Direction.COUNTERCLOCKWISE)
+    # Motores
+    motor_esquerdo = Motor(Port.E)
+    motor_direito = Motor(Port.F, Direction.COUNTERCLOCKWISE)
 
-# Base de movimentação personalizada
-base = ReDriveBase(motor_esquerdo, motor_direito, wheel_diameter=38, axle_track=112)
+    # Base de movimentação personalizada
+    base = ReDriveBase(motor_esquerdo, motor_direito, wheel_diameter=38, axle_track=112)
 
-# multiplicadores sensores de cor
-sensor_esquerdo.set_multiplicadores(1, 1, 1, 0.9)
-sensor_direito.set_multiplicadores(1, 1, 1, 0.9)
+    # multiplicadores sensores de cor
+    sensor_esquerdo.set_multiplicadores(1, 1, 1, 0.9)
+    sensor_direito.set_multiplicadores(1, 1, 1, 0.9)
 
-# Parâmetros PIC
-kp = 25
-kd = -0.012
-kc = -0.06
+    # Parâmetros PIC
+    kp = 25
+    kd = -0.012
+    kc = -0.06
 
-# Velocidades
-velocidade_base = 75
-velocidade_reta = 120
-velocidade_busca = 100
-velocidade_fina = 10
-fazer_busca = True
+    # Velocidades
+    velocidade_base = 75
+    velocidade_reta = 120
+    velocidade_busca = 100
+    velocidade_fina = 10
+    fazer_busca = True
 
-# Limiares
-limite_busca = 50  # mesa oficial
-# limite_busca = 1 #mesa de testes em casa
-limiar_preto = 14
-margem_cinza = 19
-verde = (22, 32, 28)
-limiar_verde = 8
+    # Limiares
+    limite_busca = 50  # mesa oficial
+    # limite_busca = 1 #mesa de testes em casa
+    limiar_preto = 14
+    margem_cinza = 19
+    verde = (22, 32, 28)
+    limiar_verde = 8
 
-# Variáveis de controle
-curva_cumulativa = 0
-erro = 0
-ultimo_tempo = cronometro.time()
-tempo_em_linha = 0
-angulo_inicio_linha = 0
-primeiro_erro_linha = 0
-estava_na_linha: bool = False
+    # Variáveis de controle
+    curva_cumulativa = 0
+    erro = 0
+    ultimo_tempo = cronometro.time()
+    tempo_em_linha = 0
+    angulo_inicio_linha = 0
+    primeiro_erro_linha = 0
+    estava_na_linha: bool = False
 
-# Zera o giroscópio
-hub.imu.reset_heading(0)
-
-
-def sair_sala_3_reto(hub, base, sensores, alinhar: bool, u):
-    if (alinhar):
-        base.straight(-1 * u)
-    else:
-        quantizar_posicao(hub, 90)
-
-    base.drive(900, 0)
-
-    while (sensores.get_sensor_right_if_true(True).rgb()[1] > limiar_preto):
-        wait(1)
+    # Zera o giroscópio
+    hub.imu.reset_heading(0)
 
 
-def quantizar_posicao(hub, step):
-    base.curve(((hub.imu.heading() + (step / 2)) % step) - (step / 2), 0, 20)
+    def sair_sala_3_reto(hub, base, sensores, alinhar: bool, u):
+        if (alinhar):
+            base.straight(-1 * u)
+        else:
+            quantizar_posicao(hub, 90)
+
+        base.drive(900, 0)
+
+        while (sensores.get_sensor_right_if_true(True).rgb()[1] > limiar_preto):
+            wait(1)
 
 
-def is_tilted(hub):
-    return hub.imu.tilt()[0] + hub.imu.tilt()[1] > 12
+    def quantizar_posicao(hub, step):
+        base.curve(((hub.imu.heading() + (step / 2)) % step) - (step / 2), 0, 20)
 
 
-# Loop principal
+    def is_tilted(hub):
+        return hub.imu.tilt()[0] + hub.imu.tilt()[1] > 12
+
+
+    # Loop principal
 while True:
     tempo_atual = cronometro.time()
     delta_t = max(0.001, (tempo_atual - ultimo_tempo) / 1000)
@@ -285,5 +286,7 @@ while True:
 
 
     wait(1)
+
+
 
 
