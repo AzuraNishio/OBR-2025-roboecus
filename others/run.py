@@ -1,7 +1,7 @@
 import subprocess
 
 device_name = "gambare yala"
-script_file = "__main__.py"
+script_file = "code/main.py"
 
 subprocess.run([
     "pybricksdev", "run", "ble",
