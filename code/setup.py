@@ -26,3 +26,4 @@ sensor_direito.set_multiplicadores(1, 1, 1, 0.9)
 
 # Resetar ângulo
 hub.imu.reset_heading(0)
+

@@ -346,3 +346,6 @@ class ReColorDuo:
        ===========================================
        """)
 
+    def is_one_sensor_on_color(self, color, limit):
+        return self.left.compare_rgb(color, limit) or self.right.compare_rgb(color, limit)
+
